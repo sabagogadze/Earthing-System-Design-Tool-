@@ -13,7 +13,9 @@ import {
   AlertCircle, 
   Layers, 
   ThermometerSun,
-  Droplets
+  Droplets,
+  Snowflake,
+  FlaskConical
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { clsx, type ClassValue } from 'clsx';
@@ -36,13 +38,6 @@ const SOIL_TYPES = [
   { id: 'custom', name: 'სხვა (ხელით შეყვანა)', rho: 0 },
 ];
 
-const CONFIGURATIONS = [
-  { id: 'single', name: 'ერთი ღერო', count: 1 },
-  { id: 'triangle', name: 'სამკუთხა კონტური', count: 3 },
-  { id: 'linear', name: 'ხაზოვანი (3 ღერო)', count: 3 },
-  { id: 'grid_4', name: 'კვადრატული ბადე (4 ღერო)', count: 4 },
-];
-
 const MATERIALS = [
   { id: 'copper', name: 'სპილენძი', k: 1 },
   { id: 'galvanized', name: 'მოთუთიებული ფოლადი', k: 1.2 }, // Simplified material factor
@@ -52,49 +47,100 @@ export default function App() {
   // State
   const [soilType, setSoilType] = useState(SOIL_TYPES[1]);
   const [customRho, setCustomRho] = useState<number>(50);
-  const [config, setConfig] = useState(CONFIGURATIONS[0]);
   const [length, setLength] = useState<number>(2.5); // L
   const [diameter, setDiameter] = useState<number>(0.016); // d (meters)
   const [depth, setDepth] = useState<number>(2.5); // h
   const [material, setMaterial] = useState(MATERIALS[1]);
-  const [isDrySeason, setIsDrySeason] = useState(false);
+  const [seasonality, setSeasonality] = useState<number>(1.1); // Ks
+  const [useGEM, setUseGEM] = useState<boolean>(false);
   const [targetResistance, setTargetResistance] = useState<number>(10);
+  
+  // Horizontal Strip State
+  const [useStrip, setUseStrip] = useState<boolean>(true);
+  const [stripWidth, setStripWidth] = useState<number>(40); // mm
+  const [stripDepth, setStripDepth] = useState<number>(0.5); // m
+  const [rodSpacing, setRodSpacing] = useState<number>(3); // m
 
   // Derived Values
   const effectiveRho = useMemo(() => {
-    const baseRho = soilType.id === 'custom' ? customRho : soilType.rho;
-    return isDrySeason ? baseRho * 1.5 : baseRho;
-  }, [soilType, customRho, isDrySeason]);
+    return soilType.id === 'custom' ? customRho : soilType.rho;
+  }, [soilType, customRho]);
 
   const results = useMemo(() => {
+    const effectiveDiameter = useGEM ? diameter * 3 : diameter;
     // Formula for single vertical rod: R = (rho / (2 * PI * L)) * ln(4L / d)
-    // d is diameter, L is length
-    const singleR = (effectiveRho / (2 * Math.PI * length)) * Math.log((4 * length) / diameter);
+    const singleR = (effectiveRho / (2 * Math.PI * length)) * Math.log((4 * length) / effectiveDiameter);
     
-    // For multiple rods: R_total = R_single / (n * efficiency)
-    const efficiency = 0.8; // Efficiency factor eta
-    const totalR = singleR / (config.count * efficiency);
-    
-    const isAcceptable = totalR <= targetResistance;
-    
-    // Recommendation logic
-    let recommendation = "";
-    let neededRods = config.count;
-    if (!isAcceptable) {
-      // Calculate how many rods needed: targetR = singleR / (n * 0.8) => n = singleR / (targetR * 0.8)
-      neededRods = Math.ceil(singleR / (targetResistance * efficiency));
-      recommendation = `წინაღობის ${targetResistance} ომამდე დასაყვანად დაამატეთ კიდევ ${neededRods - config.count} ღერო ან გაზარდეთ მათი სიგრძე.`;
+    let neededRods = 1;
+    let actualR = singleR * seasonality;
+    let configId = 'single';
+    let configName = 'ერთი ღერო';
+
+    const calculateTotalR = (n: number) => {
+      const efficiency = n === 1 ? 1 : (rodSpacing >= length ? 0.9 : 0.75);
+      const rv = singleR / (n * efficiency);
+      
+      if (!useStrip || n === 1) return rv * seasonality;
+
+      // Calculate horizontal strip resistance
+      let Lh = (n - 1) * rodSpacing;
+      if (n === 3) Lh = 3 * rodSpacing; // Triangle
+      if (n === 4) Lh = 4 * rodSpacing; // Square
+      
+      const w = stripWidth / 1000; // convert to meters
+      const h = stripDepth;
+      
+      let rh = Infinity;
+      if (Lh > 0) {
+        const insideLog = (2 * Lh * Lh) / (w * h);
+        rh = (effectiveRho / (2 * Math.PI * Lh)) * Math.log(Math.max(insideLog, 2));
+      }
+      
+      // Combined resistance (parallel with C=1.1 mutual interference penalty)
+      const combinedR = ((rv * rh) / (rv + rh)) * 1.1;
+      return combinedR * seasonality;
+    };
+
+    if (calculateTotalR(1) > targetResistance) {
+      while (calculateTotalR(neededRods) > targetResistance && neededRods < 100) {
+        neededRods++;
+      }
+      actualR = calculateTotalR(neededRods);
     } else {
-      recommendation = "წინაღობა ნორმის ფარგლებშია.";
+      actualR = calculateTotalR(1);
+    }
+
+    if (neededRods === 1) {
+      configId = 'single';
+      configName = 'ერთი ღერო';
+    } else if (neededRods === 2) {
+      configId = 'linear_2';
+      configName = useStrip ? 'ხაზოვანი (2 ღერო + სალტე)' : 'ხაზოვანი (2 ღერო)';
+    } else if (neededRods === 3) {
+      configId = 'triangle';
+      configName = useStrip ? 'სამკუთხა კონტური (3 ღერო + სალტე)' : 'სამკუთხა კონტური (3 ღერო)';
+    } else if (neededRods === 4) {
+      configId = 'grid_4';
+      configName = useStrip ? 'კვადრატული ბადე (4 ღერო + სალტე)' : 'კვადრატული ბადე (4 ღერო)';
+    } else {
+      configId = 'grid_n';
+      configName = useStrip ? `მრავალღეროვანი (${neededRods} ღერო + სალტე)` : `მრავალღეროვანი (${neededRods} ღერო)`;
+    }
+
+    let warning = "";
+    if (effectiveRho > 500) {
+      warning = "მაღალი კუთრი წინაღობის გამო, რეკომენდებულია ჰორიზონტალური კონტურის გაზრდა ან ქიმიური დამუშავება (GEM).";
     }
 
     return {
-      totalR: parseFloat(totalR.toFixed(2)),
-      isAcceptable,
-      recommendation,
-      neededRods
+      neededRods,
+      actualR: parseFloat(actualR.toFixed(2)),
+      singleR: parseFloat((singleR * seasonality).toFixed(2)),
+      configId,
+      configName,
+      warning
     };
-  }, [effectiveRho, length, diameter, config, targetResistance]);
+  }, [effectiveRho, length, diameter, targetResistance, useStrip, stripWidth, stripDepth, rodSpacing, seasonality, useGEM]);
 
   const exportPDF = async () => {
     const element = document.getElementById('report-content');
@@ -137,20 +183,24 @@ export default function App() {
           </p>
         </div>
         
-        <div className="flex items-center gap-3 self-end sm:self-auto">
+        <div className="flex items-center gap-1 bg-white/5 p-1 rounded-full border border-white/10 self-end sm:self-auto">
           <button 
-            onClick={() => setIsDrySeason(!isDrySeason)}
-            className={cn(
-              "flex items-center gap-2 px-4 py-2.5 rounded-full border transition-all text-sm font-medium",
-              isDrySeason 
-                ? "bg-orange-500/10 border-orange-500/30 text-orange-400" 
-                : "bg-blue-500/10 border-blue-500/30 text-blue-400"
-            )}
+            onClick={() => setSeasonality(1.1)}
+            className={cn("flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition-all", seasonality === 1.1 ? "bg-blue-500/20 text-blue-400" : "text-white/40 hover:text-white/70")}
           >
-            {isDrySeason ? <ThermometerSun size={16} /> : <Droplets size={16} />}
-            <span>
-              {isDrySeason ? "მშრალი (x1.5)" : "სველი სეზონი"}
-            </span>
+            <Droplets size={14} /> <span className="hidden sm:inline">ტენიანი</span>
+          </button>
+          <button 
+            onClick={() => setSeasonality(1.4)}
+            className={cn("flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition-all", seasonality === 1.4 ? "bg-orange-500/20 text-orange-400" : "text-white/40 hover:text-white/70")}
+          >
+            <ThermometerSun size={14} /> <span className="hidden sm:inline">მშრალი</span>
+          </button>
+          <button 
+            onClick={() => setSeasonality(1.8)}
+            className={cn("flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition-all", seasonality === 1.8 ? "bg-cyan-500/20 text-cyan-400" : "text-white/40 hover:text-white/70")}
+          >
+            <Snowflake size={14} /> <span className="hidden sm:inline">გაყინული</span>
           </button>
         </div>
       </header>
@@ -167,7 +217,14 @@ export default function App() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 md:gap-6">
               {/* Soil Type */}
               <div className="space-y-2">
-                <label>ნიადაგის ტიპი</label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="!mb-0">ნიადაგის ტიპი</label>
+                  {soilType.id !== 'custom' && (
+                    <span className="text-[10px] font-mono text-[#00ff88] bg-[#00ff88]/10 px-2 py-0.5 rounded-full border border-[#00ff88]/20">
+                      ρ = {soilType.rho} Ω·m
+                    </span>
+                  )}
+                </div>
                 <select 
                   className="w-full h-11"
                   value={soilType.id}
@@ -181,7 +238,7 @@ export default function App() {
                   <motion.div 
                     initial={{ opacity: 0, height: 0 }}
                     animate={{ opacity: 1, height: 'auto' }}
-                    className="mt-2"
+                    className="mt-2 space-y-2"
                   >
                     <label className="text-[10px] uppercase tracking-wider opacity-50">კუთრი წინაღობა (Ω·m)</label>
                     <input 
@@ -190,22 +247,38 @@ export default function App() {
                       value={customRho}
                       onChange={(e) => setCustomRho(Number(e.target.value))}
                     />
+                    <p className="text-[10px] text-orange-400/80 leading-relaxed">
+                      * თუ გაქვთ დიაპაზონი (მაგ: 200-8000), უსაფრთხოებისთვის გამოიყენეთ <b>მაქსიმალური</b> მნიშვნელობა, ან ჩაატარეთ ზუსტი გეოლოგიური გაზომვა.
+                    </p>
                   </motion.div>
                 )}
               </div>
 
-              {/* Configuration */}
-              <div className="space-y-2">
-                <label>კონფიგურაცია</label>
-                <select 
-                  className="w-full h-11"
-                  value={config.id}
-                  onChange={(e) => setConfig(CONFIGURATIONS.find(c => c.id === e.target.value) || CONFIGURATIONS[0])}
-                >
-                  {CONFIGURATIONS.map(c => (
-                    <option key={c.id} value={c.id}>{c.name}</option>
+              {/* Target Resistance */}
+              <div className="space-y-2 sm:col-span-2">
+                <label>სასურველი წინაღობა (Ω)</label>
+                <div className="flex flex-wrap gap-2">
+                  {[4, 10, 25].map(val => (
+                    <button
+                      key={val}
+                      onClick={() => setTargetResistance(val)}
+                      className={cn(
+                        "flex-1 min-w-[60px] h-11 rounded-lg text-sm font-bold transition-all",
+                        targetResistance === val 
+                          ? "bg-[#00ff88] text-black shadow-[0_0_15px_rgba(0,255,136,0.3)]" 
+                          : "bg-white/5 text-white/60 hover:bg-white/10"
+                      )}
+                    >
+                      {val} Ω
+                    </button>
                   ))}
-                </select>
+                  <input 
+                    type="number"
+                    className="w-full sm:w-24 h-11 text-center font-mono"
+                    value={targetResistance}
+                    onChange={(e) => setTargetResistance(Number(e.target.value))}
+                  />
+                </div>
               </div>
 
               {/* Electrode Length */}
@@ -258,6 +331,28 @@ export default function App() {
                 </select>
               </div>
 
+              {/* GEM Toggle */}
+              <div className="space-y-2 sm:col-span-2 flex items-center justify-between bg-[#00ff88]/5 border border-[#00ff88]/20 p-3 rounded-xl">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-[#00ff88]/20 rounded-lg">
+                    <FlaskConical className="text-[#00ff88]" size={18} />
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-bold text-white">GEM (ქიმიური დამუშავება)</h4>
+                    <p className="text-[10px] text-white/50">ზრდის კონტაქტის ფართობს და ამცირებს წინაღობას</p>
+                  </div>
+                </div>
+                <label className="relative flex items-center cursor-pointer">
+                  <input 
+                    type="checkbox" 
+                    className="sr-only peer"
+                    checked={useGEM}
+                    onChange={(e) => setUseGEM(e.target.checked)}
+                  />
+                  <div className="w-11 h-6 bg-white/10 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#00ff88]"></div>
+                </label>
+              </div>
+
               {/* Target Resistance */}
               <div className="space-y-2 sm:col-span-2">
                 <label>სასურველი წინაღობა (Ω)</label>
@@ -284,6 +379,65 @@ export default function App() {
                   />
                 </div>
               </div>
+
+              {/* Horizontal Strip Toggle */}
+              <div className="space-y-3 sm:col-span-2 pt-4 border-t border-white/10">
+                <label className="flex items-center gap-3 cursor-pointer group">
+                  <div className="relative flex items-center justify-center">
+                    <input 
+                      type="checkbox" 
+                      className="peer sr-only"
+                      checked={useStrip}
+                      onChange={(e) => setUseStrip(e.target.checked)}
+                    />
+                    <div className="w-10 h-6 bg-white/10 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#00ff88]"></div>
+                  </div>
+                  <span className="text-sm font-semibold text-white/90 group-hover:text-white transition-colors">
+                    ჰორიზონტალური სალტე (შემაერთებელი კონტური)
+                  </span>
+                </label>
+                
+                <AnimatePresence>
+                  {useStrip && (
+                    <motion.div 
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: 'auto' }}
+                      exit={{ opacity: 0, height: 0 }}
+                      className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-2 overflow-hidden"
+                    >
+                      <div className="space-y-2">
+                        <label className="text-[10px] uppercase tracking-wider opacity-60">სალტის სიგანე (მმ)</label>
+                        <input 
+                          type="number" 
+                          className="w-full h-10 text-sm bg-black/20" 
+                          value={stripWidth}
+                          onChange={(e) => setStripWidth(Number(e.target.value))}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-[10px] uppercase tracking-wider opacity-60">ჩაფლვის სიღრმე (მ)</label>
+                        <input 
+                          type="number" 
+                          step="0.1"
+                          className="w-full h-10 text-sm bg-black/20" 
+                          value={stripDepth}
+                          onChange={(e) => setStripDepth(Number(e.target.value))}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-[10px] uppercase tracking-wider opacity-60">ღეროებს შორის მანძილი (მ)</label>
+                        <input 
+                          type="number" 
+                          step="0.5"
+                          className="w-full h-10 text-sm bg-black/20" 
+                          value={rodSpacing}
+                          onChange={(e) => setRodSpacing(Number(e.target.value))}
+                        />
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
             </div>
           </section>
 
@@ -304,53 +458,31 @@ export default function App() {
           <motion.div 
             layout
             className={cn(
-              "glass-card rounded-2xl p-6 md:p-8 flex flex-col items-center justify-center text-center space-y-6 relative overflow-hidden transition-colors duration-500",
-              results.isAcceptable ? "neon-border" : "border-red-500/40 shadow-[0_0_20px_rgba(239,68,68,0.1)]"
+              "glass-card rounded-2xl p-6 md:p-8 flex flex-col items-center justify-center text-center space-y-6 relative overflow-hidden transition-colors duration-500 neon-border"
             )}
           >
             {/* Background Glow */}
             <div className={cn(
-              "absolute -top-24 -right-24 w-64 h-64 blur-[100px] opacity-20 transition-colors duration-500",
-              results.isAcceptable ? "bg-[#00ff88]" : "bg-red-500"
+              "absolute -top-24 -right-24 w-64 h-64 blur-[100px] opacity-20 transition-colors duration-500 bg-[#00ff88]"
             )} />
 
             <div className="space-y-1 relative z-10">
               <span className="text-[10px] md:text-xs font-semibold text-white/40 uppercase tracking-[0.2em]">
-                ჯამური წინაღობა
+                საჭირო ღეროების რაოდენობა
               </span>
               <div className="flex items-baseline justify-center gap-2">
                 <motion.span 
-                  key={results.totalR}
+                  key={results.neededRods}
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                   className={cn(
-                    "text-6xl md:text-8xl font-bold tracking-tighter tabular-nums",
-                    results.isAcceptable ? "text-[#00ff88]" : "text-red-500"
+                    "text-6xl md:text-8xl font-bold tracking-tighter tabular-nums text-[#00ff88]"
                   )}
                 >
-                  {results.totalR}
+                  {results.neededRods}
                 </motion.span>
-                <span className="text-2xl md:text-4xl font-light text-white/20">Ω</span>
+                <span className="text-2xl md:text-4xl font-light text-white/20">ცალი</span>
               </div>
-            </div>
-
-            <div className={cn(
-              "relative z-10 flex items-center gap-2 px-6 py-3 rounded-full font-bold text-sm transition-all duration-500",
-              results.isAcceptable 
-                ? "bg-[#00ff88]/10 text-[#00ff88] border border-[#00ff88]/20" 
-                : "bg-red-500/10 text-red-500 border border-red-500/20"
-            )}>
-              {results.isAcceptable ? (
-                <>
-                  <CheckCircle2 size={18} />
-                  <span>მისაღებია</span>
-                </>
-              ) : (
-                <>
-                  <AlertCircle size={18} />
-                  <span>არ არის მისაღები</span>
-                </>
-              )}
             </div>
 
             <div className="w-full h-px bg-white/5 relative z-10" />
@@ -363,23 +495,28 @@ export default function App() {
               
               <div className="grid grid-cols-2 gap-3">
                 <div className="bg-white/5 p-4 rounded-2xl border border-white/5">
-                  <span className="text-[9px] text-white/30 block uppercase font-bold mb-1">ნიადაგის ρ</span>
-                  <span className="text-base md:text-lg font-mono font-bold text-white/80">{effectiveRho} <span className="text-[10px] opacity-40">Ω·m</span></span>
+                  <span className="text-[9px] text-white/30 block uppercase font-bold mb-1">მიღწეული წინაღობა</span>
+                  <span className="text-base md:text-lg font-mono font-bold text-[#00ff88]">{results.actualR} <span className="text-[10px] opacity-40">Ω</span></span>
                 </div>
                 <div className="bg-white/5 p-4 rounded-2xl border border-white/5">
-                  <span className="text-[9px] text-white/30 block uppercase font-bold mb-1">რაოდენობა</span>
-                  <span className="text-base md:text-lg font-mono font-bold text-white/80">{config.count} <span className="text-[10px] opacity-40">ღერო</span></span>
+                  <span className="text-[9px] text-white/30 block uppercase font-bold mb-1">1 ღეროს წინაღობა</span>
+                  <span className="text-base md:text-lg font-mono font-bold text-white/80">{results.singleR} <span className="text-[10px] opacity-40">Ω</span></span>
                 </div>
               </div>
 
               <div className={cn(
-                "p-4 rounded-2xl text-xs md:text-sm leading-relaxed border",
-                results.isAcceptable 
-                  ? "bg-[#00ff88]/5 border-[#00ff88]/10 text-white/70" 
-                  : "bg-red-500/5 border-red-500/10 text-white/70"
+                "p-4 rounded-2xl text-xs md:text-sm leading-relaxed border bg-[#00ff88]/5 border-[#00ff88]/10 text-white/70 space-y-2"
               )}>
-                <span className="font-bold text-white block mb-1.5">💡 რეკომენდაცია:</span>
-                {results.recommendation}
+                <div>
+                  <span className="font-bold text-white block mb-1">💡 რეკომენდებული კონფიგურაცია:</span>
+                  {results.configName}
+                </div>
+                {results.warning && (
+                  <div className="pt-2 mt-2 border-t border-[#00ff88]/20 text-orange-400">
+                    <span className="font-bold block mb-1">⚠️ ყურადღება:</span>
+                    {results.warning}
+                  </div>
+                )}
               </div>
             </div>
           </motion.div>
@@ -397,7 +534,7 @@ export default function App() {
                 <line x1="20" y1="40" x2="180" y2="40" stroke="rgba(255,255,255,0.15)" strokeWidth="1" strokeDasharray="4 2" />
                 
                 <AnimatePresence mode="wait">
-                  {config.id === 'single' && (
+                  {results.configId === 'single' && (
                     <motion.g
                       key="single"
                       initial={{ opacity: 0, scale: 0.8 }}
@@ -411,7 +548,20 @@ export default function App() {
                     </motion.g>
                   )}
 
-                  {config.id === 'triangle' && (
+                  {results.configId === 'linear_2' && (
+                    <motion.g
+                      key="linear_2"
+                      initial={{ opacity: 0, x: -20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      exit={{ opacity: 0, x: 20 }}
+                    >
+                      <line x1="75" y1="80" x2="125" y2="80" stroke="#00ff88" strokeWidth={useStrip ? 3 : 1} strokeDasharray={useStrip ? "none" : "4 4"} opacity={useStrip ? 1 : 0.3} />
+                      <line x1="75" y1="60" x2="75" y2="100" stroke="#00ff88" strokeWidth="4" strokeLinecap="round" />
+                      <line x1="125" y1="60" x2="125" y2="100" stroke="#00ff88" strokeWidth="4" strokeLinecap="round" />
+                    </motion.g>
+                  )}
+
+                  {results.configId === 'triangle' && (
                     <motion.g
                       key="triangle"
                       initial={{ opacity: 0, rotate: -10 }}
@@ -419,9 +569,9 @@ export default function App() {
                       exit={{ opacity: 0, rotate: 10 }}
                     >
                       {/* Triangle Rods */}
-                      <line x1="100" y1="50" x2="60" y2="110" stroke="#00ff88" strokeWidth="3" />
-                      <line x1="60" y1="110" x2="140" y2="110" stroke="#00ff88" strokeWidth="3" />
-                      <line x1="140" y1="110" x2="100" y2="50" stroke="#00ff88" strokeWidth="3" />
+                      <line x1="100" y1="50" x2="60" y2="110" stroke="#00ff88" strokeWidth={useStrip ? 3 : 1} strokeDasharray={useStrip ? "none" : "4 4"} opacity={useStrip ? 1 : 0.3} />
+                      <line x1="60" y1="110" x2="140" y2="110" stroke="#00ff88" strokeWidth={useStrip ? 3 : 1} strokeDasharray={useStrip ? "none" : "4 4"} opacity={useStrip ? 1 : 0.3} />
+                      <line x1="140" y1="110" x2="100" y2="50" stroke="#00ff88" strokeWidth={useStrip ? 3 : 1} strokeDasharray={useStrip ? "none" : "4 4"} opacity={useStrip ? 1 : 0.3} />
                       {/* Rod points */}
                       <circle cx="100" cy="50" r="4" fill="#00ff88" />
                       <circle cx="60" cy="110" r="4" fill="#00ff88" />
@@ -429,36 +579,43 @@ export default function App() {
                     </motion.g>
                   )}
 
-                  {config.id === 'linear' && (
+                  {results.configId === 'grid_4' && (
                     <motion.g
-                      key="linear"
-                      initial={{ opacity: 0, x: -20 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      exit={{ opacity: 0, x: 20 }}
-                    >
-                      {/* Linear Connection */}
-                      <line x1="50" y1="80" x2="150" y2="80" stroke="#00ff88" strokeWidth="2" strokeDasharray="2 2" />
-                      {/* Rods */}
-                      <line x1="50" y1="60" x2="50" y2="100" stroke="#00ff88" strokeWidth="4" strokeLinecap="round" />
-                      <line x1="100" y1="60" x2="100" y2="100" stroke="#00ff88" strokeWidth="4" strokeLinecap="round" />
-                      <line x1="150" y1="60" x2="150" y2="100" stroke="#00ff88" strokeWidth="4" strokeLinecap="round" />
-                    </motion.g>
-                  )}
-
-                  {config.id === 'grid_4' && (
-                    <motion.g
-                      key="grid"
+                      key="grid_4"
                       initial={{ opacity: 0, scale: 0.5 }}
                       animate={{ opacity: 1, scale: 1 }}
                       exit={{ opacity: 0, scale: 0.5 }}
                     >
                       {/* Grid Square */}
-                      <rect x="60" y="60" width="80" height="60" fill="none" stroke="#00ff88" strokeWidth="2" strokeDasharray="4 2" />
+                      <rect x="60" y="60" width="80" height="60" fill="none" stroke="#00ff88" strokeWidth={useStrip ? 3 : 1} strokeDasharray={useStrip ? "none" : "4 4"} opacity={useStrip ? 1 : 0.3} />
                       {/* Corner Rods */}
                       <circle cx="60" cy="60" r="5" fill="#00ff88" />
                       <circle cx="140" cy="60" r="5" fill="#00ff88" />
                       <circle cx="60" cy="120" r="5" fill="#00ff88" />
                       <circle cx="140" cy="120" r="5" fill="#00ff88" />
+                    </motion.g>
+                  )}
+
+                  {results.configId === 'grid_n' && (
+                    <motion.g
+                      key="grid_n"
+                      initial={{ opacity: 0, scale: 0.5 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      exit={{ opacity: 0, scale: 0.5 }}
+                    >
+                      <rect x="50" y="50" width="100" height="60" fill="none" stroke="#00ff88" strokeWidth={useStrip ? 2 : 1} strokeDasharray={useStrip ? "none" : "4 4"} opacity={useStrip ? 1 : 0.3} />
+                      <line x1="100" y1="50" x2="100" y2="110" stroke="#00ff88" strokeWidth={useStrip ? 2 : 1} strokeDasharray={useStrip ? "none" : "4 4"} opacity={useStrip ? 1 : 0.3} />
+                      <line x1="50" y1="80" x2="150" y2="80" stroke="#00ff88" strokeWidth={useStrip ? 2 : 1} strokeDasharray={useStrip ? "none" : "4 4"} opacity={useStrip ? 1 : 0.3} />
+                      
+                      <circle cx="50" cy="50" r="4" fill="#00ff88" />
+                      <circle cx="100" cy="50" r="4" fill="#00ff88" />
+                      <circle cx="150" cy="50" r="4" fill="#00ff88" />
+                      <circle cx="50" cy="80" r="4" fill="#00ff88" />
+                      <circle cx="100" cy="80" r="4" fill="#00ff88" />
+                      <circle cx="150" cy="80" r="4" fill="#00ff88" />
+                      <circle cx="50" cy="110" r="4" fill="#00ff88" />
+                      <circle cx="100" cy="110" r="4" fill="#00ff88" />
+                      <circle cx="150" cy="110" r="4" fill="#00ff88" />
                     </motion.g>
                   )}
                 </AnimatePresence>
