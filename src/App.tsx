@@ -120,54 +120,56 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen p-4 md:p-8 max-w-7xl mx-auto">
+    <div className="min-h-screen p-4 md:p-6 lg:p-8 max-w-7xl mx-auto overflow-x-hidden">
       {/* Header */}
-      <header className="mb-12 flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2 mb-2">
-            <Zap className="text-[#00ff88] w-8 h-8" />
-            <h1 className="text-3xl font-bold tracking-tight neon-text">
+      <header className="mb-8 md:mb-12 flex flex-col sm:flex-row sm:items-center justify-between gap-6">
+        <div className="space-y-1">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-[#00ff88]/10 rounded-lg">
+              <Zap className="text-[#00ff88] w-6 h-6 md:w-8 md:h-8" />
+            </div>
+            <h1 className="text-2xl md:text-3xl font-bold tracking-tight neon-text">
               დამიწების კალკულატორი
             </h1>
           </div>
-          <p className="text-white/50 text-sm">
-            Earthing System Design Tool • IEEE 80 & BS 7430 Standards
+          <p className="text-white/40 text-xs md:text-sm pl-11 sm:pl-0">
+            Earthing System Design Tool • IEEE 80 & BS 7430
           </p>
         </div>
         
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 self-end sm:self-auto">
           <button 
             onClick={() => setIsDrySeason(!isDrySeason)}
             className={cn(
-              "flex items-center gap-2 px-4 py-2 rounded-full border transition-all",
+              "flex items-center gap-2 px-4 py-2.5 rounded-full border transition-all text-sm font-medium",
               isDrySeason 
-                ? "bg-orange-500/10 border-orange-500/50 text-orange-400" 
-                : "bg-blue-500/10 border-blue-500/50 text-blue-400"
+                ? "bg-orange-500/10 border-orange-500/30 text-orange-400" 
+                : "bg-blue-500/10 border-blue-500/30 text-blue-400"
             )}
           >
-            {isDrySeason ? <ThermometerSun size={18} /> : <Droplets size={18} />}
-            <span className="text-sm font-medium">
-              {isDrySeason ? "მშრალი სეზონი (x1.5)" : "სველი სეზონი"}
+            {isDrySeason ? <ThermometerSun size={16} /> : <Droplets size={16} />}
+            <span>
+              {isDrySeason ? "მშრალი (x1.5)" : "სველი სეზონი"}
             </span>
           </button>
         </div>
       </header>
 
-      <main className="grid grid-cols-1 lg:grid-cols-12 gap-8" id="report-content">
+      <main className="grid grid-cols-1 lg:grid-cols-12 gap-6 md:gap-8 pb-12" id="report-content">
         {/* Left Side: Inputs */}
-        <div className="lg:col-span-7 space-y-6">
-          <section className="glass-card rounded-2xl p-6 space-y-6 neon-border">
+        <div className="lg:col-span-7 space-y-6 order-2 lg:order-1">
+          <section className="glass-card rounded-2xl p-5 md:p-6 space-y-6 neon-border">
             <div className="flex items-center gap-2 border-b border-white/10 pb-4">
               <Settings2 className="text-[#00ff88]" size={20} />
-              <h2 className="text-lg font-semibold">ძირითადი პარამეტრები</h2>
+              <h2 className="text-lg font-semibold">პარამეტრები</h2>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 md:gap-6">
               {/* Soil Type */}
               <div className="space-y-2">
                 <label>ნიადაგის ტიპი</label>
                 <select 
-                  className="w-full"
+                  className="w-full h-11"
                   value={soilType.id}
                   onChange={(e) => setSoilType(SOIL_TYPES.find(t => t.id === e.target.value) || SOIL_TYPES[0])}
                 >
@@ -177,14 +179,14 @@ export default function App() {
                 </select>
                 {soilType.id === 'custom' && (
                   <motion.div 
-                    initial={{ opacity: 0, y: -10 }}
-                    animate={{ opacity: 1, y: 0 }}
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
                     className="mt-2"
                   >
-                    <label className="text-xs">კუთრი წინაღობა (Ω·m)</label>
+                    <label className="text-[10px] uppercase tracking-wider opacity-50">კუთრი წინაღობა (Ω·m)</label>
                     <input 
                       type="number" 
-                      className="w-full" 
+                      className="w-full h-11" 
                       value={customRho}
                       onChange={(e) => setCustomRho(Number(e.target.value))}
                     />
@@ -194,9 +196,9 @@ export default function App() {
 
               {/* Configuration */}
               <div className="space-y-2">
-                <label>კონტურის კონფიგურაცია</label>
+                <label>კონფიგურაცია</label>
                 <select 
-                  className="w-full"
+                  className="w-full h-11"
                   value={config.id}
                   onChange={(e) => setConfig(CONFIGURATIONS.find(c => c.id === e.target.value) || CONFIGURATIONS[0])}
                 >
@@ -208,11 +210,11 @@ export default function App() {
 
               {/* Electrode Length */}
               <div className="space-y-2">
-                <label>ელექტროდის სიგრძე (L, მ)</label>
+                <label>სიგრძე (L, მ)</label>
                 <input 
                   type="number" 
                   step="0.1"
-                  className="w-full" 
+                  className="w-full h-11" 
                   value={length}
                   onChange={(e) => setLength(Number(e.target.value))}
                 />
@@ -224,7 +226,7 @@ export default function App() {
                 <input 
                   type="number" 
                   step="1"
-                  className="w-full" 
+                  className="w-full h-11" 
                   value={diameter * 1000}
                   onChange={(e) => setDiameter(Number(e.target.value) / 1000)}
                 />
@@ -236,7 +238,7 @@ export default function App() {
                 <input 
                   type="number" 
                   step="0.1"
-                  className="w-full" 
+                  className="w-full h-11" 
                   value={depth}
                   onChange={(e) => setDepth(Number(e.target.value))}
                 />
@@ -246,7 +248,7 @@ export default function App() {
               <div className="space-y-2">
                 <label>მასალა</label>
                 <select 
-                  className="w-full"
+                  className="w-full h-11"
                   value={material.id}
                   onChange={(e) => setMaterial(MATERIALS.find(m => m.id === e.target.value) || MATERIALS[0])}
                 >
@@ -257,17 +259,17 @@ export default function App() {
               </div>
 
               {/* Target Resistance */}
-              <div className="space-y-2">
+              <div className="space-y-2 sm:col-span-2">
                 <label>სასურველი წინაღობა (Ω)</label>
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2">
                   {[4, 10, 25].map(val => (
                     <button
                       key={val}
                       onClick={() => setTargetResistance(val)}
                       className={cn(
-                        "flex-1 py-2 rounded-lg text-xs font-bold transition-all",
+                        "flex-1 min-w-[60px] h-11 rounded-lg text-sm font-bold transition-all",
                         targetResistance === val 
-                          ? "bg-[#00ff88] text-black" 
+                          ? "bg-[#00ff88] text-black shadow-[0_0_15px_rgba(0,255,136,0.3)]" 
                           : "bg-white/5 text-white/60 hover:bg-white/10"
                       )}
                     >
@@ -276,7 +278,7 @@ export default function App() {
                   ))}
                   <input 
                     type="number"
-                    className="w-20 text-center"
+                    className="w-full sm:w-24 h-11 text-center font-mono"
                     value={targetResistance}
                     onChange={(e) => setTargetResistance(Number(e.target.value))}
                   />
@@ -285,90 +287,98 @@ export default function App() {
             </div>
           </section>
 
-          <section className="glass-card rounded-2xl p-6">
-            <div className="flex items-center gap-2 mb-4 text-white/40">
-              <Info size={16} />
-              <p className="text-xs">
-                გამოყენებული ფორმულა: R = (ρ / 2πL) * ln(4L/d). 
-                მრავალღეროვანი კონტურისას გათვალისწინებულია ჯგუფური კოეფიციენტი η = 0.8.
+          <section className="glass-card rounded-2xl p-4 border-l-4 border-[#00ff88]/30">
+            <div className="flex gap-3 text-white/50">
+              <div className="mt-0.5"><Info size={14} /></div>
+              <p className="text-[11px] leading-relaxed">
+                გამოთვლები ეფუძნება IEEE 80 და BS 7430 სტანდარტებს. 
+                R = (ρ / 2πL) * ln(4L/d). 
+                ჯგუფური ეფექტურობა: η = 0.8.
               </p>
             </div>
           </section>
         </div>
 
         {/* Right Side: Results */}
-        <div className="lg:col-span-5 space-y-6">
+        <div className="lg:col-span-5 space-y-6 order-1 lg:order-2">
           <motion.div 
             layout
             className={cn(
-              "glass-card rounded-2xl p-8 flex flex-col items-center justify-center text-center space-y-6 relative overflow-hidden",
-              results.isAcceptable ? "neon-border" : "border-red-500/30"
+              "glass-card rounded-2xl p-6 md:p-8 flex flex-col items-center justify-center text-center space-y-6 relative overflow-hidden transition-colors duration-500",
+              results.isAcceptable ? "neon-border" : "border-red-500/40 shadow-[0_0_20px_rgba(239,68,68,0.1)]"
             )}
           >
             {/* Background Glow */}
             <div className={cn(
-              "absolute -top-24 -right-24 w-48 h-48 blur-[100px] opacity-20",
+              "absolute -top-24 -right-24 w-64 h-64 blur-[100px] opacity-20 transition-colors duration-500",
               results.isAcceptable ? "bg-[#00ff88]" : "bg-red-500"
             )} />
 
-            <div className="space-y-1">
-              <span className="text-sm font-medium text-white/50 uppercase tracking-widest">
+            <div className="space-y-1 relative z-10">
+              <span className="text-[10px] md:text-xs font-semibold text-white/40 uppercase tracking-[0.2em]">
                 ჯამური წინაღობა
               </span>
-              <div className="flex items-baseline gap-2">
-                <span className={cn(
-                  "text-7xl font-bold tracking-tighter",
-                  results.isAcceptable ? "text-[#00ff88]" : "text-red-500"
-                )}>
+              <div className="flex items-baseline justify-center gap-2">
+                <motion.span 
+                  key={results.totalR}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className={cn(
+                    "text-6xl md:text-8xl font-bold tracking-tighter tabular-nums",
+                    results.isAcceptable ? "text-[#00ff88]" : "text-red-500"
+                  )}
+                >
                   {results.totalR}
-                </span>
-                <span className="text-3xl font-light text-white/30">Ω</span>
+                </motion.span>
+                <span className="text-2xl md:text-4xl font-light text-white/20">Ω</span>
               </div>
             </div>
 
             <div className={cn(
-              "flex items-center gap-2 px-6 py-3 rounded-full font-bold text-sm",
+              "relative z-10 flex items-center gap-2 px-6 py-3 rounded-full font-bold text-sm transition-all duration-500",
               results.isAcceptable 
                 ? "bg-[#00ff88]/10 text-[#00ff88] border border-[#00ff88]/20" 
                 : "bg-red-500/10 text-red-500 border border-red-500/20"
             )}>
               {results.isAcceptable ? (
                 <>
-                  <CheckCircle2 size={20} />
-                  მისაღებია
+                  <CheckCircle2 size={18} />
+                  <span>მისაღებია</span>
                 </>
               ) : (
                 <>
-                  <AlertCircle size={20} />
-                  არ არის მისაღები
+                  <AlertCircle size={18} />
+                  <span>არ არის მისაღები</span>
                 </>
               )}
             </div>
 
-            <div className="w-full h-px bg-white/10" />
+            <div className="w-full h-px bg-white/5 relative z-10" />
 
-            <div className="w-full text-left space-y-4">
-              <h3 className="text-sm font-semibold text-white/70 flex items-center gap-2">
-                <Layers size={16} />
-                დეტალური ანალიზი
+            <div className="w-full text-left space-y-5 relative z-10">
+              <h3 className="text-xs font-bold text-white/30 uppercase tracking-widest flex items-center gap-2">
+                <Layers size={14} />
+                ანალიზი
               </h3>
               
-              <div className="grid grid-cols-2 gap-4">
-                <div className="bg-white/5 p-3 rounded-xl">
-                  <span className="text-[10px] text-white/40 block uppercase">ნიადაგის ρ</span>
-                  <span className="text-lg font-mono">{effectiveRho} Ω·m</span>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="bg-white/5 p-4 rounded-2xl border border-white/5">
+                  <span className="text-[9px] text-white/30 block uppercase font-bold mb-1">ნიადაგის ρ</span>
+                  <span className="text-base md:text-lg font-mono font-bold text-white/80">{effectiveRho} <span className="text-[10px] opacity-40">Ω·m</span></span>
                 </div>
-                <div className="bg-white/5 p-3 rounded-xl">
-                  <span className="text-[10px] text-white/40 block uppercase">ღეროების რაოდენობა</span>
-                  <span className="text-lg font-mono">{config.count}</span>
+                <div className="bg-white/5 p-4 rounded-2xl border border-white/5">
+                  <span className="text-[9px] text-white/30 block uppercase font-bold mb-1">რაოდენობა</span>
+                  <span className="text-base md:text-lg font-mono font-bold text-white/80">{config.count} <span className="text-[10px] opacity-40">ღერო</span></span>
                 </div>
               </div>
 
               <div className={cn(
-                "p-4 rounded-xl text-sm leading-relaxed",
-                results.isAcceptable ? "bg-[#00ff88]/5 text-white/80" : "bg-red-500/5 text-white/80"
+                "p-4 rounded-2xl text-xs md:text-sm leading-relaxed border",
+                results.isAcceptable 
+                  ? "bg-[#00ff88]/5 border-[#00ff88]/10 text-white/70" 
+                  : "bg-red-500/5 border-red-500/10 text-white/70"
               )}>
-                <span className="font-bold block mb-1">რეკომენდაცია:</span>
+                <span className="font-bold text-white block mb-1.5">💡 რეკომენდაცია:</span>
                 {results.recommendation}
               </div>
             </div>
@@ -382,9 +392,9 @@ export default function App() {
             </div>
             
             <div className="w-full h-full flex items-center justify-center">
-              <svg width="200" height="160" viewBox="0 0 200 160" className="drop-shadow-[0_0_15px_rgba(0,255,136,0.3)]">
+              <svg width="200" height="160" viewBox="0 0 200 160" className="drop-shadow-[0_0_15px_rgba(0,255,136,0.2)]">
                 {/* Ground Surface Line */}
-                <line x1="20" y1="40" x2="180" y2="40" stroke="rgba(255,255,255,0.2)" strokeWidth="1" strokeDasharray="4 2" />
+                <line x1="20" y1="40" x2="180" y2="40" stroke="rgba(255,255,255,0.15)" strokeWidth="1" strokeDasharray="4 2" />
                 
                 <AnimatePresence mode="wait">
                   {config.id === 'single' && (
@@ -455,9 +465,9 @@ export default function App() {
                 
                 {/* Ground Symbol */}
                 <g transform="translate(100, 140)">
-                  <line x1="-15" y1="0" x2="15" y2="0" stroke="rgba(255,255,255,0.3)" strokeWidth="2" />
-                  <line x1="-10" y1="5" x2="10" y2="5" stroke="rgba(255,255,255,0.3)" strokeWidth="2" />
-                  <line x1="-5" y1="10" x2="5" y2="10" stroke="rgba(255,255,255,0.3)" strokeWidth="2" />
+                  <line x1="-15" y1="0" x2="15" y2="0" stroke="rgba(255,255,255,0.2)" strokeWidth="2" />
+                  <line x1="-10" y1="5" x2="10" y2="5" stroke="rgba(255,255,255,0.2)" strokeWidth="2" />
+                  <line x1="-5" y1="10" x2="5" y2="10" stroke="rgba(255,255,255,0.2)" strokeWidth="2" />
                 </g>
               </svg>
             </div>
@@ -465,8 +475,8 @@ export default function App() {
         </div>
       </main>
 
-      <footer className="mt-12 text-center text-white/20 text-[10px] uppercase tracking-widest">
-        © 2026 Earthing Design Pro • IEC 60364-5-52 & IEEE 80 Compliant
+      <footer className="mt-8 pb-8 text-center text-white/10 text-[9px] uppercase tracking-[0.3em]">
+        Earthing Design Pro • 2026 • IEC & IEEE Standards
       </footer>
     </div>
   );

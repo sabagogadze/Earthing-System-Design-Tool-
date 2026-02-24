@@ -6,8 +6,12 @@
 }
 
 @layer base {
+  html, body, #root {
+    @apply h-full;
+  }
   body {
-    @apply bg-[#0a0a0a] text-white font-sans antialiased;
+    @apply bg-[#0a0a0a] text-white font-sans antialiased overflow-x-hidden;
+    -webkit-overflow-scrolling: touch;
   }
 }
 
